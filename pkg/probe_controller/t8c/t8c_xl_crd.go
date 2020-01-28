@@ -78,10 +78,12 @@ func getOrCreateCRD(client clientv1beta1.ApiextensionsV1beta1Interface) (*v1beta
 		return nil, fmt.Errorf("failed to create the t8c XL CRD (gvr=%v)\n%v", gvr, err)
 	}
 	var crd *v1beta1.CustomResourceDefinition	// this will be filled below
-	return crd, clientretry.OnError(clientretry.DefaultRetry, func(err error) bool {
-		return errors.IsNotFound(err)
-	}, func() error {
+	return crd, clientretry.RetryOnConflict(clientretry.DefaultRetry, func() error {
 		crd, err = client.CustomResourceDefinitions().Get(defaultCrd.Name, metav1.GetOptions{})
+		if errors.IsNotFound(err) {
+			grpResource := schema.GroupResource{Group: gvr.Group, Resource: gvr.Resource}
+			return errors.NewConflict(grpResource, "IsNotFound error encapsulated in a Conflict error", err)
+		}
 		return err
 	})
 }
